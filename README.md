@@ -5,6 +5,8 @@
 ## Problem
 Different users can request the same lab equipment at nearly the same time. A client-side availability check is not enough: two clients can both see "available" before either writes. SlotSync uses a shared transaction coordinator to prevent the second reservation.
 
+Live demo: https://slotsync-distributed-booking.vercel.app/
+
 ## What runs
 - React resource board with fixed one-hour reservations, workspace links, client aliases and manual refresh.
 - Python FastAPI HTTP RPC on Vercel; no long-lived server or WebSocket dependency.
@@ -30,7 +32,7 @@ flowchart LR
 | Safety invariant | `UNIQUE(room, resource, day, hour)` | At most one stored reservation per fixed-hour slot |
 | Logical clocks | Server `max(server, received) + 1`; clients advance after send/receive | Lamport ordering, not physical time or vector clocks |
 | Failure semantics | Committed request result saved with idempotency key and fingerprint | Same-key retries replay result; not universal exactly-once delivery |
-| Naming | UUID workspace/resource names map to database records | Application-level naming, not DNS implementation |
+| Naming | UUID workspaces and fixed resource names map to database records | Application-level naming, not DNS implementation |
 
 A room-level lock serializes different resources too. This is deliberately simple but reduces throughput. The unique constraint remains a second guard. All operations using this API follow the same coordinator. There is no leader election, distributed consensus, replicated database implementation or tested failover claim.
 
@@ -38,7 +40,7 @@ A room-level lock serializes different resources too. This is deliberately simpl
 Python 3.10+, Node 20+ and PostgreSQL. Set `DATABASE_URL` to a PostgreSQL connection URL (SSL when required). Never commit credentials.
 
 ```sh
-npm ci
+npm install
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
@@ -78,4 +80,7 @@ Built with AI assistance. This repository does not claim the code was independen
 - Vercel Python runtime: https://vercel.com/docs/functions/runtimes/python
 - Lamport, Time, Clocks, and the Ordering of Events in a Distributed System: https://lamport.azurewebsites.net/pubs/time-clocks.pdf
 
-See `tests/test_api.py` for executable live integration tests. Results should be measured against the deployment, not assumed from the design.
+Install the test tools with `pip install pytest httpx`, then run `SLOTSYNC_URL=https://slotsync-distributed-booking.vercel.app python -m pytest test_api.py -q`. See `test_api.py` for executable live integration tests. Results should be measured against the deployment, not assumed from the design.
+
+## Verified deployment evaluation (14 October 2026)
+Ten live API integration tests passed on the deployed app: health, two-client conflict, same-key replay, reused-key mismatch, received-clock update, invalid resource, invalid hour, workspace isolation, invalid workspace ID and missing workspace. One UI race returned a 409 conflict for Client A and a 201 success for Client B, replayed Client A's 409, and showed one saved reservation. This is a small functional check, not a load test or proof of fault-tolerant availability.
